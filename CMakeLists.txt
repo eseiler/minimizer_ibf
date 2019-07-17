@@ -135,3 +135,6 @@ target_link_libraries(minimizer_example "pthread")
 add_executable(minimizer_benchmark src/minimizer_benchmark.cpp)
 target_link_libraries(minimizer_benchmark "pthread" "benchmark")
 add_dependencies(minimizer_benchmark benchmark)
+
+add_executable(ibf_example src/ibf_example.cpp)
+target_link_libraries(ibf_example "pthread")

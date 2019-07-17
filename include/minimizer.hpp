@@ -5,21 +5,16 @@
 // shipped with this file and also available at: https://github.com/eseiler/minimizer_ibf/blob/master/LICENSE
 // -----------------------------------------------------------------------------------------------------
 
+/*!\file
+ * \author Enrico Seiler <enrico.seiler AT fu-berlin.de>
+ * \brief Provides minimizer.
+ */
+
 #pragma once
 
-#include <sdsl/bit_vectors.hpp>
 #include <seqan/seq_io.h>
-#include <seqan/modifier.h>
-#include <valarray>
-#include <algorithm>
-#include <future>
-#include <mutex>
-#include <type_traits>
 
-//!\brief Strong type for passing the window size.
-struct window { uint64_t v; };
-//!\brief Strong type for passing the kmer size.
-struct kmer { uint64_t v; };
+#include <strong_types.hpp>
 
 //!\brief Whether to use xor for computing the hash value.
 enum use_xor : bool
