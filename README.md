@@ -7,7 +7,7 @@ This repository contains reference data and (minimal) code for computing minimiz
 
 ## Setup
 ```console
-git clone --recursive https://github.com/eseiler/minimizer_ibf
+git clone --recurse-submodules https://github.com/eseiler/minimizer_ibf
 cd minimizer_ibf
 mkdir build
 cd build
@@ -17,7 +17,7 @@ make minimizer_benchmark
 ./minimizer_example
 ./minimizer_benchmark
 ```
-Note the `--recursive` when cloning.
+Note the `--recurse-submodules` when cloning.
 
 If the correct compiler is not detected by default, pass `-DCMAKE_CXX_COMPILER=executable` to the `cmake` command. `executable` refers to the compiler, e.g. `g++-9`.
 

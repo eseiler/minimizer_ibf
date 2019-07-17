@@ -1,15 +1,10 @@
 [submodule "seqan"]
 	path = submodules/seqan
-	url = https://github.com/seqan/seqan.git
-	branch = develop
-	shallow = true
+	url = https://github.com/eseiler/seqan.git
+	branch = fix/gcc9_copy_deprecation
 [submodule "sdsl"]
 	path = submodules/sdsl-lite
 	url = https://github.com/xxsds/sdsl-lite.git
-	branch = master
-	shallow = true
 [submodule "benchmark"]
 	path = submodules/benchmark
 	url = https://github.com/google/benchmark.git
-	branch = master
-	shallow = true

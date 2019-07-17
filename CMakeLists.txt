@@ -93,20 +93,22 @@ endif(CCACHE_PROGRAM)
 # Add google/benchmark
 # ----------------------------------------------------------------------------
 
+set(google_benchmark_args "")
+list (APPEND google_benchmark_args "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
+list (APPEND google_benchmark_args "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+list (APPEND google_benchmark_args "-DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}")
+list (APPEND google_benchmark_args "-DBENCHMARK_ENABLE_TESTING=false")
+list (APPEND google_benchmark_args "-DCMAKE_INSTALL_LIBDIR=${PROJECT_BINARY_DIR}/lib/")
+
 include(ExternalProject)
-set(
-    google_benchmark_args
-    "-DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}"
-    "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
-    "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
-    "-DBENCHMARK_ENABLE_TESTING=false"
-)
 ExternalProject_Add(
     google_benchmark
     PREFIX google_benchmark
     SOURCE_DIR "${BENCHMARK_ROOT}"
     CMAKE_ARGS "${google_benchmark_args}"
 )
+
+unset (google_benchmark_args)
 
 add_library (benchmark STATIC IMPORTED)
 add_dependencies(benchmark google_benchmark)
