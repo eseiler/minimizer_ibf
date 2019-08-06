@@ -15,7 +15,7 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make minimizer_example
 make minimizer_benchmark
 ./minimizer_example
-./minimizer_benchmark
+./minimizer_benchmark ../data/example.fasta
 ```
 Note the `--recurse-submodules` when cloning.
 

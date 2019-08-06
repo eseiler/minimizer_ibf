@@ -63,6 +63,12 @@ else ()
 endif ()
 
 # ----------------------------------------------------------------------------
+# Find zlib
+# ----------------------------------------------------------------------------
+
+find_package (ZLIB REQUIRED)
+
+# ----------------------------------------------------------------------------
 # Load SeqAn module
 # ----------------------------------------------------------------------------
 
@@ -133,7 +139,7 @@ add_executable(minimizer_example src/minimizer_example.cpp)
 target_link_libraries(minimizer_example "pthread")
 
 add_executable(minimizer_benchmark src/minimizer_benchmark.cpp)
-target_link_libraries(minimizer_benchmark "pthread" "benchmark")
+target_link_libraries(minimizer_benchmark "pthread" "benchmark" "z")
 add_dependencies(minimizer_benchmark benchmark)
 
 add_executable(ibf_example src/ibf_example.cpp)
