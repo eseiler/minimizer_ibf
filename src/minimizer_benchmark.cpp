@@ -46,13 +46,10 @@ static void compute_minimizer(benchmark::State & state)
 
 static void minimizer_arguments(benchmark::internal::Benchmark* b)
 {
-    for (int32_t w = 23; w <= 23; ++w)
-    {
-        for (int32_t k = w - 3; k <= w; ++k)
-        {
-            b->Args({w, k});
-        }
-    }
+    std::vector<int32_t> windows{23, 24, 25, 40, 100, 1000};
+
+    for (auto w : windows)
+        b->Args({w, 20});
 }
 
 BENCHMARK_TEMPLATE(compute_minimizer, use_xor::no)->Apply(minimizer_arguments);
