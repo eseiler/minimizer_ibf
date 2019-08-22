@@ -8,3 +8,6 @@
 [submodule "benchmark"]
 	path = submodules/benchmark
 	url = https://github.com/google/benchmark.git
+[submodule "submodules/seqan3"]
+	path = submodules/seqan3
+	url = https://github.com/seqan/seqan3
