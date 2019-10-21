@@ -10,10 +10,12 @@
  * \brief Provides strong types to protect interfaces.
  */
 
+#pragma once
+
 //!\brief Strong type for passing the window size.
 struct window { uint64_t v; };
 //!\brief Strong type for passing the kmer size.
-struct kmer { uint64_t v; };
+struct kmer { uint8_t v; };
 //!\brief Strong type for passing number of bins.
 struct bins { uint64_t v; };
 //!\brief Strong type for passing number of bits.

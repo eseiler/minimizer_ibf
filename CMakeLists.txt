@@ -69,6 +69,12 @@ endif ()
 find_package (ZLIB REQUIRED)
 
 # ----------------------------------------------------------------------------
+# Find SeqAn3
+# ----------------------------------------------------------------------------
+
+find_package (SeqAn3 REQUIRED HINTS ${CMAKE_SOURCE_DIR}/submodules/seqan3/build_system/)
+
+# ----------------------------------------------------------------------------
 # Load SeqAn module
 # ----------------------------------------------------------------------------
 
@@ -136,11 +142,17 @@ include_directories("${CMAKE_SOURCE_DIR}/include/")
 add_definitions(-DBASE_DIR="${CMAKE_SOURCE_DIR}")
 
 add_executable(minimizer_example src/minimizer_example.cpp)
-target_link_libraries(minimizer_example "pthread")
+target_link_libraries(minimizer_example "pthread" seqan3::seqan3)
 
 add_executable(minimizer_benchmark src/minimizer_benchmark.cpp)
 target_link_libraries(minimizer_benchmark "pthread" "benchmark" "z")
-add_dependencies(minimizer_benchmark benchmark)
+add_dependencies(minimizer_benchmark benchmark seqan3::seqan3)
 
 add_executable(ibf_example src/ibf_example.cpp)
-target_link_libraries(ibf_example "pthread")
+target_link_libraries(ibf_example "pthread" seqan3::seqan3)
+
+add_executable(build_min_ibf src/build_min_ibf.cpp)
+target_link_libraries(build_min_ibf seqan3::seqan3)
+
+add_executable(search_min_ibf src/search_min_ibf.cpp)
+target_link_libraries(search_min_ibf seqan3::seqan3)

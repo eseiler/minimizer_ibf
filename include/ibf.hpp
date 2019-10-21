@@ -17,8 +17,11 @@
 
 #include <sdsl/bit_vectors.hpp>
 
-#include <seqan/seq_io.h>
+#include <seqan3/alphabet/nucleotide/dna4.hpp>
+#include <seqan3/core/concept/cereal.hpp>
+#include <seqan3/range/views/kmer_hash.hpp>
 
+#include <minimizer.hpp>
 #include <strong_types.hpp>
 
 /*!\brief The IBF binning directory.
@@ -70,15 +73,11 @@ private:
     // We fix some SeqAn2 related types since we won't use anything else for now.
     // ===============================================================================================================
     //!\brief The alphabet type.
-    using alphabet_t = seqan::Dna;
+    using alphabet_t = seqan3::dna4;
     //!\brief The text type.
-    using text_t = seqan::String<alphabet_t>;
-    //!\brief The seqan::Shape type to compute rolling hashes with.
-    using shape_t = seqan::Shape<alphabet_t, seqan::SimpleShape>;
-    //!\brief Shape for computing the k-mers.
-    shape_t hash_shape{};
+    using text_t = seqan3::dna4_vector;
     //!brief The k-mer size.
-    size_t k{};
+    uint8_t k{};
 
     //!\brief The number of bins.
     size_t nbins{};
@@ -319,10 +318,8 @@ public:
      */
     void insert_data(size_t const bin, text_t const & text) noexcept
     {
-        seqan::resize(hash_shape, k);
-        seqan::hashInit(hash_shape, seqan::begin(text));
-        for (size_t i = 0; i < seqan::length(text) - k + 1; ++i)
-            set(seqan::hashNext(hash_shape, seqan::begin(text) + i), bin);
+        for (auto && e: text | seqan3::views::kmer_hash(seqan3::ungapped{k}))
+            set(e, bin);
     }
 
     /*!\brief Count the k-mers of a query in all bins.
@@ -334,12 +331,9 @@ public:
         std::vector<size_t> result(nbins, 0);
         sdsl::bit_vector tmp_vec(nbins);
 
-        seqan::resize(hash_shape, k);
-        seqan::hashInit(hash_shape, seqan::begin(query));
-
-        for (size_t i = 0; i < seqan::length(query) - k + 1; ++i)
+        for (auto && e: query | seqan3::views::kmer_hash(seqan3::ungapped{k}))
         {
-            tmp_vec = get(seqan::hashNext(hash_shape, seqan::begin(query) + i), std::move(tmp_vec));
+            tmp_vec = get(e, std::move(tmp_vec));
 
             // TODO SIMD
             size_t bin{0};
@@ -364,5 +358,25 @@ public:
         }
         return result;
     }
+
+    /*!\cond DEV
+     * \brief Serialisation support function.
+     * \tparam archive_t Type of `archive`; must satisfy seqan3::CerealArchive.
+     * \param archive The archive being serialised from/to.
+     *
+     * \attention These functions are never called directly, see \ref serialisation for more details.
+     */
+    template <seqan3::cereal_archive archive_t>
+    void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
+    {
+        archive(nbins);
+        archive(bin_width);
+        archive(block_size);
+        archive(block_count);
+        archive(num_hash);
+        archive(data);
+        archive(pre_hash);
+    }
+    //!\endcond
 
 };
