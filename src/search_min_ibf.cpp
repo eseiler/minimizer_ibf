@@ -1,6 +1,7 @@
 #include <seqan3/argument_parser/all.hpp>
 #include <seqan3/core/concept/cereal.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/range/views/async_input_buffer.hpp>
 
 #include <iostream>
 #include <ibf.hpp>
@@ -15,7 +16,8 @@ struct my_traits : seqan3::sequence_file_input_default_traits_dna
 void run_program(std::filesystem::path const & query_path,
                  std::filesystem::path const & ibf_path,
                  uint8_t const n_k,
-                 uint64_t const n_w)
+                 uint64_t const n_w,
+                 uint8_t const n_t)
 {
     binning_directory ibf;
 
@@ -23,42 +25,58 @@ void run_program(std::filesystem::path const & query_path,
     cereal::BinaryInputArchive iarchive{is};
     iarchive(ibf);
 
-    minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
-
     seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::SEQ>> fin{query_path};
 
-    for (auto & [seq] : fin)
+    // create the async buffer around the input file
+    // spawns a background thread that tries to keep eight records in the buffer
+    auto v = fin | seqan3::views::async_input_buffer(8);
+
+    // create a lambda function that iterates over the async buffer when called
+    // (the buffer gets dynamically refilled as soon as possible)
+    auto worker = [&v, &ibf, n_w, n_k] ()
     {
+        minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
         std::vector<size_t> result(ibf.get_bins(), 0);
         sdsl::bit_vector tmp_vec(ibf.get_bins());
 
-        mini.compute(seq);
-        for (auto && hash : mini.minimizer_hash)
+        for (auto & [seq] : v)
         {
-            tmp_vec = ibf.get(hash, std::move(tmp_vec));
+            result.clear();
+            tmp_vec.clear();
 
-            // TODO SIMD
-            size_t bin{0};
-            for (size_t batch = 0; batch < ((ibf.get_bins() + 63) >> 6); ++batch)
+            mini.compute(seq);
+            for (auto && hash : mini.minimizer_hash)
             {
-                size_t tmp = tmp_vec.get_int(batch * 64);
-                if (tmp ^ (1ULL<<63))
+                tmp_vec = ibf.get(hash, std::move(tmp_vec));
+
+                // TODO SIMD
+                size_t bin{0};
+                for (size_t batch = 0; batch < ((ibf.get_bins() + 63) >> 6); ++batch)
                 {
-                    while (tmp > 0)
+                    size_t tmp = tmp_vec.get_int(batch * 64);
+                    if (tmp ^ (1ULL<<63))
                     {
-                        uint8_t step = sdsl::bits::lo(tmp);
-                        bin += step++;
-                        tmp >>= step;
-                        ++result[bin++];
+                        while (tmp > 0)
+                        {
+                            uint8_t step = sdsl::bits::lo(tmp);
+                            bin += step++;
+                            tmp >>= step;
+                            ++result[bin++];
+                        }
                     }
-                }
-                else
-                {
-                    ++result[bin + 63];
+                    else
+                    {
+                        ++result[bin + 63];
+                    }
                 }
             }
         }
-    }
+    };
+
+    std::vector<decltype(std::async(std::launch::async, worker))> tasks;
+
+    for (size_t i = 0; i < n_t; ++i)
+        tasks.emplace_back(std::async(std::launch::async, worker));
 }
 
 struct cmd_arguments
@@ -67,6 +85,7 @@ struct cmd_arguments
     std::filesystem::path ibf_path{};
     uint64_t w{23};
     uint8_t k{20};
+    uint8_t t{1};
 };
 
 void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments & args)
@@ -81,6 +100,8 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
                       seqan3::arithmetic_range_validator{1, 1000});
     parser.add_option(args.k, '\0', "kmer", "Choose the kmer size.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 32});
+    parser.add_option(args.t, '\0', "threads", "Choose the number of threads.", seqan3::option_spec::DEFAULT,
+                      seqan3::arithmetic_range_validator{1, 2048});
 }
 
 int main(int argc, char ** argv)
@@ -98,6 +119,6 @@ int main(int argc, char ** argv)
         return -1;
     }
 
-    run_program(args.query_path, args.ibf_path, args.k, args.w);
+    run_program(args.query_path, args.ibf_path, args.k, args.w, args.t);
     return 0;
 }
