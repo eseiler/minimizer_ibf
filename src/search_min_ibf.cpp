@@ -2,9 +2,9 @@
 #include <seqan3/core/concept/cereal.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
 #include <seqan3/range/views/async_input_buffer.hpp>
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 #include <iostream>
-#include <ibf.hpp>
 #include <minimizer.hpp>
 
 
@@ -17,15 +17,15 @@ void run_program(std::filesystem::path const & query_path,
                  std::filesystem::path const & ibf_path,
                  uint8_t const n_k,
                  uint64_t const n_w,
-                 uint8_t const n_t)
+                 uint8_t const)
 {
-    binning_directory ibf;
+    seqan3::interleaved_bloom_filter ibf;
 
     std::ifstream is{ibf_path, std::ios::binary};
     cereal::BinaryInputArchive iarchive{is};
     iarchive(ibf);
 
-    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::SEQ>> fin{query_path};
+    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{query_path};
 
     // create the async buffer around the input file
     // spawns a background thread that tries to keep eight records in the buffer
@@ -33,50 +33,39 @@ void run_program(std::filesystem::path const & query_path,
 
     // create a lambda function that iterates over the async buffer when called
     // (the buffer gets dynamically refilled as soon as possible)
-    auto worker = [&v, &ibf, n_w, n_k] ()
+    minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
+    std::vector<size_t> result(ibf.bin_count(), 0);
+
+    for (auto & [seq] : v)
     {
-        minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
-        std::vector<size_t> result(ibf.get_bins(), 0);
-        sdsl::bit_vector tmp_vec(ibf.get_bins());
+        result.clear();
+        mini.compute(seq);
 
-        for (auto & [seq] : v)
+        for (auto && hash : mini.minimizer_hash)
         {
-            result.clear();
-            tmp_vec.clear();
+            auto & res = ibf.bulk_contains(hash);
 
-            mini.compute(seq);
-            for (auto && hash : mini.minimizer_hash)
+            size_t bin{0};
+            for (size_t batch = 0; batch < ((ibf.bin_count() + 63) >> 6); ++batch)
             {
-                tmp_vec = ibf.get(hash, std::move(tmp_vec));
-
-                // TODO SIMD
-                size_t bin{0};
-                for (size_t batch = 0; batch < ((ibf.get_bins() + 63) >> 6); ++batch)
+                size_t tmp = res.get_int(batch * 64);
+                if (tmp ^ (1ULL<<63))
                 {
-                    size_t tmp = tmp_vec.get_int(batch * 64);
-                    if (tmp ^ (1ULL<<63))
+                    while (tmp > 0)
                     {
-                        while (tmp > 0)
-                        {
-                            uint8_t step = sdsl::bits::lo(tmp);
-                            bin += step++;
-                            tmp >>= step;
-                            ++result[bin++];
-                        }
+                        uint8_t step = sdsl::bits::lo(tmp);
+                        bin += step++;
+                        tmp >>= step;
+                        ++result[bin++];
                     }
-                    else
-                    {
-                        ++result[bin + 63];
-                    }
+                }
+                else
+                {
+                    ++result[bin + 63];
                 }
             }
         }
-    };
-
-    std::vector<decltype(std::async(std::launch::async, worker))> tasks;
-
-    for (size_t i = 0; i < n_t; ++i)
-        tasks.emplace_back(std::async(std::launch::async, worker));
+    }
 }
 
 struct cmd_arguments
@@ -113,7 +102,7 @@ int main(int argc, char ** argv)
     {
          myparser.parse();
     }
-    catch (seqan3::parser_invalid_argument const & ext)
+    catch (seqan3::argument_parser_error const & ext)
     {
         std::cout << "[Error] " << ext.what() << "\n";
         return -1;

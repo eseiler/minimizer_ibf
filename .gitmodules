@@ -1,13 +1,4 @@
-[submodule "seqan"]
-	path = submodules/seqan
-	url = https://github.com/eseiler/seqan.git
-	branch = fix/gcc9_copy_deprecation
-[submodule "sdsl"]
-	path = submodules/sdsl-lite
-	url = https://github.com/xxsds/sdsl-lite.git
-[submodule "benchmark"]
-	path = submodules/benchmark
-	url = https://github.com/google/benchmark.git
 [submodule "submodules/seqan3"]
 	path = submodules/seqan3
-	url = https://github.com/seqan/seqan3
+	url = https://github.com/eseiler/seqan3
+	branch = benchmark_ibf
