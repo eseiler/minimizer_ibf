@@ -23,7 +23,7 @@ void run_program(std::filesystem::path const & dir_path,
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{n_bins},
                                          seqan3::bin_size{n_bits},
                                          seqan3::hash_function_count{n_hash}};
-    minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
+    minimizer mini{window{n_w}, kmer{n_k}};
 
     for (uint64_t cur_bin = 0; cur_bin < n_bins; ++cur_bin)
     {

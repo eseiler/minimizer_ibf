@@ -1,31 +1,32 @@
-#include <seqan3/argument_parser/all.hpp>
-#include <seqan3/core/concept/cereal.hpp>
-#include <seqan3/io/sequence_file/input.hpp>
-#include <seqan3/range/views/async_input_buffer.hpp>
-#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <minimizer_model.hpp>
 
-#include <iostream>
-#include <minimizer.hpp>
-
-
-struct my_traits : seqan3::sequence_file_input_default_traits_dna
+std::vector<size_t> compute_simple_model(cmd_arguments const & args)
 {
-    using sequence_alphabet = seqan3::dna4;
-};
+    std::vector<size_t> precomp_thresholds;
 
-void run_program(std::filesystem::path const & query_path,
-                 std::filesystem::path const & ibf_path,
-                 uint8_t const n_k,
-                 uint64_t const n_w,
-                 uint8_t const)
+    if (!do_cerealisation_in(precomp_thresholds, args))
+    {
+        precomp_thresholds = precompute_threshold(args.pattern_size,
+                                                  args.window_size,
+                                                  args.kmer_size,
+                                                  args.errors,
+                                                  args.tau);
+
+        do_cerealisation_out(precomp_thresholds, args);
+    }
+
+    return precomp_thresholds;
+}
+
+void run_program(cmd_arguments const & args)
 {
     seqan3::interleaved_bloom_filter ibf;
 
-    std::ifstream is{ibf_path, std::ios::binary};
+    std::ifstream is{args.ibf_file, std::ios::binary};
     cereal::BinaryInputArchive iarchive{is};
     iarchive(ibf);
 
-    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{query_path};
+    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{args.query_file};
 
     // create the async buffer around the input file
     // spawns a background thread that tries to keep eight records in the buffer
@@ -33,12 +34,23 @@ void run_program(std::filesystem::path const & query_path,
 
     // create a lambda function that iterates over the async buffer when called
     // (the buffer gets dynamically refilled as soon as possible)
-    minimizer<use_xor::yes> mini{window{n_w}, kmer{n_k}};
+    minimizer mini{window{args.window_size}, kmer{args.kmer_size}};
+    size_t const kmers_per_window = args.window_size - args.kmer_size + 1;
+    size_t const kmers_per_pattern = args.pattern_size - args.kmer_size + 1;
+    size_t const minimal_number_of_minimizers = kmers_per_window == 1 ? kmers_per_pattern :
+                                                                        kmers_per_pattern / (kmers_per_window - 1);
+    size_t const maximal_number_of_minimizers = args.pattern_size - args.window_size + 1;
+
+    std::vector<size_t> precomp_thresholds = compute_simple_model(args);
     std::vector<size_t> result(ibf.bin_count(), 0);
+
+    size_t seq_count{0};
+    size_t hit_count{0};
 
     for (auto & [seq] : v)
     {
-        result.clear();
+        ++seq_count;
+        std::fill(result.begin(), result.end(), 0);
         mini.compute(seq);
 
         for (auto && hash : mini.minimizer_hash)
@@ -65,17 +77,24 @@ void run_program(std::filesystem::path const & query_path,
                 }
             }
         }
-    }
-}
 
-struct cmd_arguments
-{
-    std::filesystem::path query_path{};
-    std::filesystem::path ibf_path{};
-    uint64_t w{23};
-    uint8_t k{20};
-    uint8_t t{1};
-};
+        size_t const minimizer_count = mini.minimizer_hash.size();
+        size_t index = std::min(minimizer_count < minimal_number_of_minimizers ? 0 :
+                                    minimizer_count - minimal_number_of_minimizers,
+                                maximal_number_of_minimizers - minimal_number_of_minimizers);
+        auto threshold = precomp_thresholds[index];
+
+        size_t bin_no = 0;
+        for (auto & count : result)
+        {
+            count = count >= threshold;
+            if (count && bin_no == 0)
+                ++hit_count;
+            ++bin_no;
+        }
+    }
+    std::cout << "seq_count " << seq_count << '\t' << "hit_count " << hit_count << '\n';
+}
 
 void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments & args)
 {
@@ -83,14 +102,20 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
     parser.info.author = "enrico.seiler@fu-berlin.de";
     parser.info.short_description = "Search reads in a minimizer IBF.";
     parser.info.version = "1.0.0";
-    parser.add_positional_option(args.query_path, "Please provide a path the FASTQ file.");
-    parser.add_positional_option(args.ibf_path, "Please provide a valid path to a minimizer IBF.");
-    parser.add_option(args.w, '\0', "window", "Choose the window size.", seqan3::option_spec::DEFAULT,
+    parser.add_positional_option(args.query_file, "Please provide a path the FASTQ file.");
+    parser.add_positional_option(args.ibf_file, "Please provide a valid path to a minimizer IBF.");
+    parser.add_option(args.window_size, '\0', "window", "Choose the window size.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 1000});
-    parser.add_option(args.k, '\0', "kmer", "Choose the kmer size.", seqan3::option_spec::DEFAULT,
+    parser.add_option(args.kmer_size, '\0', "kmer", "Choose the kmer size.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 32});
-    parser.add_option(args.t, '\0', "threads", "Choose the number of threads.", seqan3::option_spec::DEFAULT,
-                      seqan3::arithmetic_range_validator{1, 2048});
+    // parser.add_option(args.t, '\0', "threads", "Choose the number of threads.", seqan3::option_spec::DEFAULT,
+    //                   seqan3::arithmetic_range_validator{1, 2048});
+    parser.add_option(args.errors, 'e', "error", "Choose the number of errors.", seqan3::option_spec::DEFAULT,
+                      seqan3::arithmetic_range_validator{0, 5});
+    parser.add_option(args.tau, 't', "tau", "Threshold for probabilistic models.", seqan3::option_spec::DEFAULT,
+                      seqan3::arithmetic_range_validator{0, 1});
+    parser.add_option(args.pattern_size, 'p', "pattern",
+                      "Choose the pattern size. Default: Use median of sequence lengths in query file.");
 }
 
 int main(int argc, char ** argv)
@@ -108,6 +133,18 @@ int main(int argc, char ** argv)
         return -1;
     }
 
-    run_program(args.query_path, args.ibf_path, args.k, args.w, args.t);
+    if (!args.pattern_size)
+    {
+        std::vector<uint64_t> sequence_lengths{};
+        seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> query_in{args.query_file};
+        for (auto & [seq] : query_in | seqan3::views::async_input_buffer(16))
+        {
+            sequence_lengths.push_back(std::ranges::size(seq));
+        }
+        std::sort(sequence_lengths.begin(), sequence_lengths.end());
+        args.pattern_size = sequence_lengths[sequence_lengths.size()/2];
+    }
+
+    run_program(args);
     return 0;
 }

@@ -2,7 +2,7 @@
 // Copyright (c) 2006-2019, Knut Reinert & Freie Universität Berlin
 // Copyright (c) 2016-2019, Knut Reinert & MPI für molekulare Genetik
 // This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/eseiler/minimizer_ibf/blob/master/LICENSE
+// shipped with this file and also available at: https://github.com/eseiler/minimizer_thresholds/blob/master/LICENSE
 // -----------------------------------------------------------------------------------------------------
 
 /*!\file
@@ -12,22 +12,14 @@
 
 #pragma once
 
+#include <deque>
+
 #include <seqan3/alphabet/nucleotide/dna4.hpp>
 #include <seqan3/range/views/complement.hpp>
 #include <seqan3/range/views/kmer_hash.hpp>
 
 #include <strong_types.hpp>
 
-//!\brief Whether to use xor for computing the hash value.
-enum use_xor : bool
-{
-    //!\brief Do not use xor.
-    no,
-    //!\brief Use xor.
-    yes
-};
-
-template<use_xor do_xor = use_xor::yes>
 struct minimizer
 {
 private:
@@ -37,11 +29,11 @@ private:
     using text_t = seqan3::dna4_vector;
 
     //!\brief The window size of the minimizer.
-    uint64_t w{};
+    uint64_t w{26};
     //!\brief The size of the k-mers.
-    uint8_t k{};
+    uint8_t k{20};
     //!\brief Random but fixed value to xor k-mers with. Counteracts consecutive minimizers.
-    uint64_t seed{};
+    uint64_t seed{0x8F3F73B5CF1C9ADE};
 
     //!\brief Stores the k-mer hashes of the forward strand.
     std::vector<uint64_t> forward_hashes;
@@ -86,6 +78,18 @@ public:
         seed = seed_;
     }
 
+    std::vector<uint64_t> hashes(text_t const & text)
+    {
+        compute(text);
+        return minimizer_hash;
+    }
+
+    std::vector<uint64_t> hashes_multi(text_t const & text)
+    {
+        compute_multi(text);
+        return minimizer_hash;
+    }
+
     void compute(text_t const & text)
     {
         uint64_t text_length = std::ranges::size(text);
@@ -106,25 +110,23 @@ public:
         assert(w >= k);
         uint64_t kmers_per_window = w - k + 1u;
 
-        // Compute all k-mer hashes for both forward and reverse strand.
 
         // Helper lambda for xor'ing values depending on `do_xor`.
-        auto hash_impl = [this] (uint64_t const val)
+        auto apply_xor = [this] (uint64_t const val)
         {
-            if constexpr(do_xor)
-                return val ^ seed;
-            else
-                return val;
+            return val ^ seed;
         };
 
-        forward_hashes.reserve(possible_kmers);
-        reverse_hashes.reserve(possible_kmers);
+        // Compute all k-mer hashes for both forward and reverse strand.
+        forward_hashes = text |
+                         seqan3::views::kmer_hash(seqan3::ungapped{k}) |
+                         std::views::transform(apply_xor) |
+                         seqan3::views::to<std::vector<uint64_t>>;
 
-        for (auto && e: text | seqan3::views::kmer_hash(seqan3::ungapped{k}))
-            forward_hashes.push_back(hash_impl(e));
-
-        for (auto && e: rc_text | seqan3::views::kmer_hash(seqan3::ungapped{k}))
-            reverse_hashes.push_back(hash_impl(e));
+        reverse_hashes = rc_text |
+                         seqan3::views::kmer_hash(seqan3::ungapped{k}) |
+                         std::views::transform(apply_xor) |
+                         seqan3::views::to<std::vector<uint64_t>>;
 
         // Choose the minimizers.
         minimizer_hash.reserve(possible_minimizers);
@@ -186,6 +188,94 @@ public:
                 minimizer_end.push_back(std::get<2>(*min));
                 minimizer_changed = false;
             }
+        }
+        return;
+    }
+
+    void compute_multi(text_t const & text)
+    {
+        uint64_t text_length = std::ranges::size(text);
+
+        forward_hashes.clear();
+        reverse_hashes.clear();
+        minimizer_hash.clear();
+        minimizer_begin.clear();
+        minimizer_end.clear();
+
+        // Return empty vector if text is shorter than k.
+        if (k > text_length)
+            return;
+
+        auto rc_text = text | seqan3::views::complement | std::views::reverse;
+        uint64_t possible_minimizers = text_length > w ? text_length - w + 1u : 1u;
+        uint64_t possible_kmers = text_length - k + 1;
+        assert(w >= k);
+        uint64_t kmers_per_window = w - k + 1u;
+
+
+        // Helper lambda for xor'ing values depending on `do_xor`.
+        auto apply_xor = [this] (uint64_t const val)
+        {
+            return val ^ seed;
+        };
+
+        // Compute all k-mer hashes for both forward and reverse strand.
+        forward_hashes = text |
+                         seqan3::views::kmer_hash(seqan3::ungapped{k}) |
+                         std::views::transform(apply_xor) |
+                         seqan3::views::to<std::vector<uint64_t>>;
+
+        reverse_hashes = rc_text |
+                         seqan3::views::kmer_hash(seqan3::ungapped{k}) |
+                         std::views::transform(apply_xor) |
+                         seqan3::views::to<std::vector<uint64_t>>;
+
+        // Choose the minimizers.
+        minimizer_hash.reserve(possible_minimizers);
+
+        // Stores hash, begin and end for all k-mers in the window
+        std::deque<std::tuple<uint64_t, uint64_t, uint64_t>> window_values;
+
+        // Initialisation. We need to compute all hashes for the first window.
+        for (uint64_t i = 0; i < kmers_per_window; ++i)
+        {
+            // Get smallest canonical k-mer.
+            uint64_t forward_hash = forward_hashes[i];
+            uint64_t reverse_hash = reverse_hashes[possible_kmers - i - 1];
+            window_values.emplace_back(std::min(forward_hash, reverse_hash), i, i + k - 1);
+        }
+
+        auto min = std::min_element(std::begin(window_values), std::end(window_values));
+        minimizer_hash.push_back(std::get<0>(*min));
+
+        // For the following windows, we remove the first window k-mer (is now not in window) and add the new k-mer
+        // that results from the window shifting
+        for (uint64_t i = 1; i < possible_minimizers; ++i)
+        {
+            // Shift the window.
+            // If current minimizer leaves the window, we need to decide on a new one.
+            if (min == std::begin(window_values))
+            {
+                window_values.pop_front();
+                min = std::min_element(std::begin(window_values), std::end(window_values));
+            }
+            else
+            {
+                window_values.pop_front();
+            }
+
+            uint64_t forward_hash = forward_hashes[kmers_per_window - 1 + i];
+            uint64_t reverse_hash = reverse_hashes[possible_kmers - kmers_per_window - i];
+            window_values.emplace_back(std::min(forward_hash, reverse_hash),
+                                       kmers_per_window + i - 1,
+                                       kmers_per_window + i + k - 2);
+
+            if (std::get<0>(window_values.back()) < std::get<0>(*min))
+            {
+                min = std::prev(std::end(window_values));
+            }
+
+            minimizer_hash.push_back(std::get<0>(*min));
         }
         return;
     }
