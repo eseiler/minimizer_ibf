@@ -281,9 +281,9 @@ std::vector<double> destroyed_indirectly_by_error(size_t const pattern_size, siz
     std::mt19937_64 gen(0x1D2B8284D988C4D0);
     std::uniform_int_distribution<> dis(0, max_rank);
     std::uniform_int_distribution<> dis2(0, pattern_size - 1);
-    std::vector<bool> mins(pattern_size, false);
-    std::vector<double> result(window_size-kmer_size, 0);
-    std::vector<bool> minse(pattern_size, false);
+    std::vector<uint8_t> mins(pattern_size, false);
+    std::vector<uint8_t> minse(pattern_size, false);
+    std::vector<double> result(window_size - kmer_size + 1, 0);
     std::vector<alphabet_t> sequence;
     sequence.reserve(pattern_size);
 
