@@ -38,7 +38,7 @@ struct cmd_arguments
     uint64_t window_size{23};
     uint8_t kmer_size{20};
     uint8_t errors{0};
-    // uint8_t t{1};
+    uint8_t threads{1};
     uint64_t pattern_size{};
     double tau{0.99};
 };

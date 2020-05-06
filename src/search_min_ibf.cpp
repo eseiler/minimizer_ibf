@@ -27,73 +27,101 @@ void run_program(cmd_arguments const & args)
     iarchive(ibf);
 
     seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{args.query_file};
+    // Extract bin_number from `bin_[x]+`-format query file name, otherwise set to 0.
+    size_t const bin_no = [&] () {
+        try
+        {
+            return static_cast<size_t>(std::stoi(args.query_file.stem().string().substr(4)));
+        }
+        catch (std::exception const & e)
+        {
+            return static_cast<size_t>(0);
+        }
+    }();
 
     // create the async buffer around the input file
     // spawns a background thread that tries to keep eight records in the buffer
-    auto v = fin | seqan3::views::async_input_buffer(8);
+    auto sequence_input_buffer = fin | seqan3::views::async_input_buffer(8);
 
-    // create a lambda function that iterates over the async buffer when called
-    // (the buffer gets dynamically refilled as soon as possible)
-    minimizer mini{window{args.window_size}, kmer{args.kmer_size}};
+    // Some computations related to the minimizer threshold
     size_t const kmers_per_window = args.window_size - args.kmer_size + 1;
     size_t const kmers_per_pattern = args.pattern_size - args.kmer_size + 1;
     size_t const minimal_number_of_minimizers = kmers_per_window == 1 ? kmers_per_pattern :
                                                                         kmers_per_pattern / (kmers_per_window - 1);
     size_t const maximal_number_of_minimizers = args.pattern_size - args.window_size + 1;
 
-    std::vector<size_t> precomp_thresholds = compute_simple_model(args);
-    std::vector<size_t> result(ibf.bin_count(), 0);
+    std::vector<size_t> const precomp_thresholds = compute_simple_model(args);
 
-    size_t seq_count{0};
-    size_t hit_count{0};
+    // Counts the number of read sequences/queries
+    std::atomic<size_t> seq_count{0};
+    // Counts the number of hits in the searched bin; inferred from query file name
+    std::atomic<size_t> hit_count{0};
 
-    for (auto & [seq] : v)
+    // create a lambda function that iterates over the async buffer when called
+    // (the buffer gets dynamically refilled as soon as possible)
+    auto worker = [&] ()
     {
-        ++seq_count;
-        std::fill(result.begin(), result.end(), 0);
-        mini.compute(seq);
+        minimizer mini{window{args.window_size}, kmer{args.kmer_size}};
+        decltype(ibf)::binning_bitvector result_buffer(ibf.bin_count());
+        std::vector<size_t> result(ibf.bin_count(), 0);
 
-        for (auto && hash : mini.minimizer_hash)
+        for (auto & [seq] : sequence_input_buffer)
         {
-            auto & res = ibf.bulk_contains(hash);
+            ++seq_count;
+            std::fill(result.begin(), result.end(), 0);
+            mini.compute(seq);
 
-            size_t bin{0};
-            for (size_t batch = 0; batch < ((ibf.bin_count() + 63) >> 6); ++batch)
+            for (auto && hash : mini.minimizer_hash)
             {
-                size_t tmp = res.get_int(batch * 64);
-                if (tmp ^ (1ULL<<63))
+                ibf.bulk_contains(hash, result_buffer);
+
+                size_t bin{0};
+                for (size_t batch = 0; batch < ((ibf.bin_count() + 63) >> 6); ++batch)
                 {
-                    while (tmp > 0)
+                    size_t tmp = result_buffer.get_int(batch * 64);
+                    if (tmp ^ (1ULL<<63))
                     {
-                        uint8_t step = sdsl::bits::lo(tmp);
-                        bin += step++;
-                        tmp >>= step;
-                        ++result[bin++];
+                        while (tmp > 0)
+                        {
+                            uint8_t step = sdsl::bits::lo(tmp);
+                            bin += step++;
+                            tmp >>= step;
+                            ++result[bin++];
+                        }
+                    }
+                    else
+                    {
+                        ++result[bin + 63];
                     }
                 }
-                else
-                {
-                    ++result[bin + 63];
-                }
+            }
+
+            size_t const minimizer_count = mini.minimizer_hash.size();
+            size_t index = std::min(minimizer_count < minimal_number_of_minimizers ? 0 :
+                                        minimizer_count - minimal_number_of_minimizers,
+                                    maximal_number_of_minimizers - minimal_number_of_minimizers);
+            auto threshold = precomp_thresholds[index];
+
+            size_t current_bin{0};
+            for (auto & count : result)
+            {
+                count = count >= threshold;
+                if (count && bin_no == current_bin)
+                    ++hit_count;
+                ++current_bin;
             }
         }
+    };
 
-        size_t const minimizer_count = mini.minimizer_hash.size();
-        size_t index = std::min(minimizer_count < minimal_number_of_minimizers ? 0 :
-                                    minimizer_count - minimal_number_of_minimizers,
-                                maximal_number_of_minimizers - minimal_number_of_minimizers);
-        auto threshold = precomp_thresholds[index];
+    std::vector<decltype(std::async(std::launch::async, worker))> tasks;
 
-        size_t bin_no = 0;
-        for (auto & count : result)
-        {
-            count = count >= threshold;
-            if (count && bin_no == 0)
-                ++hit_count;
-            ++bin_no;
-        }
-    }
-    std::cout << "seq_count " << seq_count << '\t' << "hit_count " << hit_count << '\n';
+    for (size_t i = 0; i < args.threads; ++i)
+        tasks.emplace_back(std::async(std::launch::async, worker));
+
+    for (auto && task : tasks)
+        task.wait();
+
+    std::cout << "seq_count " << seq_count.load() << '\t' << "hit_count " << hit_count.load() << '\n';
 }
 
 void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments & args)
@@ -108,13 +136,13 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
                       seqan3::arithmetic_range_validator{1, 1000});
     parser.add_option(args.kmer_size, '\0', "kmer", "Choose the kmer size.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 32});
-    // parser.add_option(args.t, '\0', "threads", "Choose the number of threads.", seqan3::option_spec::DEFAULT,
-    //                   seqan3::arithmetic_range_validator{1, 2048});
-    parser.add_option(args.errors, 'e', "error", "Choose the number of errors.", seqan3::option_spec::DEFAULT,
+    parser.add_option(args.threads, '\0', "threads", "Choose the number of threads.", seqan3::option_spec::DEFAULT,
+                      seqan3::arithmetic_range_validator{1, 2048});
+    parser.add_option(args.errors, '\0', "error", "Choose the number of errors.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{0, 5});
-    parser.add_option(args.tau, 't', "tau", "Threshold for probabilistic models.", seqan3::option_spec::DEFAULT,
+    parser.add_option(args.tau, '\0', "tau", "Threshold for probabilistic models.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{0, 1});
-    parser.add_option(args.pattern_size, 'p', "pattern",
+    parser.add_option(args.pattern_size, '\0', "pattern",
                       "Choose the pattern size. Default: Use median of sequence lengths in query file.");
 }
 
