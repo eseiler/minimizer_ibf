@@ -18,7 +18,9 @@ void run_program(std::filesystem::path const & dir_path,
                  uint64_t const n_w,
                  uint64_t const n_bins,
                  uint64_t const n_bits,
-                 uint64_t const n_hash)
+                 uint64_t const n_hash,
+                 bool const gz,
+                 bool const bz2)
 {
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{n_bins},
                                          seqan3::bin_size{n_bits},
@@ -26,9 +28,9 @@ void run_program(std::filesystem::path const & dir_path,
     minimizer mini{window{n_w}, kmer{n_k}};
 
     std::string extension{".fasta"};
-    if (args.gz)
+    if (gz)
         extension += ".gz";
-    if (args.bz2)
+    if (bz2)
         extension += ".bz2";
 
     for (uint64_t cur_bin = 0; cur_bin < n_bins; ++cur_bin)
@@ -104,6 +106,6 @@ int main(int argc, char ** argv)
     if (args.gz && args.bz2)
         throw seqan3::argument_parser_error{"Files cannot be both gz and bz2 compressed."};
 
-    run_program(args.bin_path, args.out_path, args.k, args.w, args.bins, args.bits, args.hash);
+    run_program(args.bin_path, args.out_path, args.k, args.w, args.bins, args.bits, args.hash, args.gz, args.bz2);
     return 0;
 }
