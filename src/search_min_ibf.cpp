@@ -1,6 +1,6 @@
 #include <minimizer_model.hpp>
 
-static inline constexpr bool debug{false};
+#define DEBUG 0
 
 std::vector<size_t> compute_simple_model(cmd_arguments const & args)
 {
@@ -30,20 +30,19 @@ void run_program(cmd_arguments const & args)
 
     seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{args.query_file};
 
-    if constexpr(debug)
-    {
-        // Extract bin_number from `bin_[x]+`-format query file name, otherwise set to 0.
-        size_t const bin_no = [&] () {
-            try
-            {
-                return static_cast<size_t>(std::stoi(args.query_file.stem().string().substr(4)));
-            }
-            catch (std::exception const & e)
-            {
-                return static_cast<size_t>(0);
-            }
-        }();
-    }
+#if DEBUG
+    // Extract bin_number from `bin_[x]+`-format query file name, otherwise set to 0.
+    size_t const bin_no = [&] () {
+        try
+        {
+            return static_cast<size_t>(std::stoi(args.query_file.stem().string().substr(4)));
+        }
+        catch (std::exception const & e)
+        {
+            return static_cast<size_t>(0);
+        }
+    }();
+#endif
 
     // create the async buffer around the input file
     // spawns a background thread that tries to keep eight records in the buffer
@@ -58,13 +57,12 @@ void run_program(cmd_arguments const & args)
 
     std::vector<size_t> const precomp_thresholds = compute_simple_model(args);
 
-    if constexpr(debug)
-    {
-        // Counts the number of read sequences/queries
-        std::atomic<size_t> seq_count{0};
-        // Counts the number of hits in the searched bin; inferred from query file name
-        std::atomic<size_t> hit_count{0};
-    }
+#if DEBUG
+    // Counts the number of read sequences/queries
+    std::atomic<size_t> seq_count{0};
+    // Counts the number of hits in the searched bin; inferred from query file name
+    std::atomic<size_t> hit_count{0};
+#endif
 
     // create a lambda function that iterates over the async buffer when called
     // (the buffer gets dynamically refilled as soon as possible)
@@ -76,7 +74,9 @@ void run_program(cmd_arguments const & args)
 
         for (auto & [seq] : sequence_input_buffer)
         {
+#if DEBUG
             ++seq_count;
+#endif
             std::fill(result.begin(), result.end(), 0);
             mini.compute(seq);
 
@@ -115,11 +115,10 @@ void run_program(cmd_arguments const & args)
             for (auto & count : result)
             {
                 count = count >= threshold;
-                if constexpr(debug)
-                {
+#if DEBUG
                     if (count && bin_no == current_bin)
                         ++hit_count;
-                }
+#endif
                 ++current_bin;
             }
         }
@@ -133,8 +132,9 @@ void run_program(cmd_arguments const & args)
     for (auto && task : tasks)
         task.wait();
 
-    if constexpr(debug)
-        std::cout << "seq_count " << seq_count.load() << '\t' << "hit_count " << hit_count.load() << '\n';
+#if DEBUG
+    std::cout << "seq_count " << seq_count.load() << '\t' << "hit_count " << hit_count.load() << '\n';
+#endif
 }
 
 void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments & args)
