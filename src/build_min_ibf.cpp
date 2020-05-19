@@ -25,10 +25,16 @@ void run_program(std::filesystem::path const & dir_path,
                                          seqan3::hash_function_count{n_hash}};
     minimizer mini{window{n_w}, kmer{n_k}};
 
+    std::string extension{".fasta"};
+    if (args.gz)
+        extension += ".gz";
+    if (args.bz2)
+        extension += ".bz2";
+
     for (uint64_t cur_bin = 0; cur_bin < n_bins; ++cur_bin)
     {
         std::filesystem::path bin_path{dir_path};
-        bin_path /= ("bin_" + std::to_string(cur_bin) + ".fasta");
+        bin_path /= ("bin_" + std::to_string(cur_bin) + extension);
 
         seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{bin_path};
 
@@ -54,6 +60,8 @@ struct cmd_arguments
     uint64_t bins{64};
     uint64_t bits{4096};
     uint64_t hash{2};
+    bool gz{false};
+    bool bz2{false};
 };
 
 void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments & args)
@@ -74,6 +82,8 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
                       seqan3::arithmetic_range_validator{1, 35184372088832});
     parser.add_option(args.hash, '\0', "hash", "Choose the number of hashes.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 4});
+    parser.add_flag(args.gz, '\0', "gz", "Expect FASTA files to be gz compressed.");
+    parser.add_flag(args.bz2, '\0', "bz2", "Expect FASTA files to be bz2 compressed.");
 }
 
 int main(int argc, char ** argv)
@@ -90,6 +100,9 @@ int main(int argc, char ** argv)
         std::cout << "[Error] " << ext.what() << "\n";
         return -1;
     }
+
+    if (args.gz && args.bz2)
+        throw seqan3::argument_parser_error{"Files cannot be both gz and bz2 compressed."};
 
     run_program(args.bin_path, args.out_path, args.k, args.w, args.bins, args.bits, args.hash);
     return 0;
