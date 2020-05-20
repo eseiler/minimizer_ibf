@@ -35,6 +35,7 @@ struct cmd_arguments
 {
     std::filesystem::path query_file{};
     std::filesystem::path ibf_file{};
+    std::filesystem::path out_file{"search.out"};
     uint64_t window_size{23};
     uint8_t kmer_size{20};
     uint8_t errors{0};

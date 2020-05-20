@@ -1,5 +1,28 @@
 #include <minimizer_model.hpp>
 
+class sync_out
+{
+public:
+    sync_out() = default;
+    sync_out(sync_out const &) = default;
+    sync_out & operator=(sync_out const &) = default;
+    sync_out(sync_out &&) = default;
+    sync_out & operator=(sync_out &&) = default;
+    ~sync_out() = default;
+
+    sync_out(std::filesystem::path const & path) : file(std::ofstream{path}) {}
+
+    void write(std::string const & data)
+    {
+        std::lock_guard<std::mutex> lock(write_mutex);
+        file << data;
+    }
+
+private:
+    std::ofstream file;
+    std::mutex write_mutex;
+};
+
 #define DEBUG 0
 
 std::vector<size_t> compute_simple_model(cmd_arguments const & args)
@@ -28,7 +51,7 @@ void run_program(cmd_arguments const & args)
     cereal::BinaryInputArchive iarchive{is};
     iarchive(ibf);
 
-    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> fin{args.query_file};
+    seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::id, seqan3::field::seq>> fin{args.query_file};
 
 #if DEBUG
     // Extract bin_number from `bin_[x]+`-format query file name, otherwise set to 0.
@@ -64,6 +87,8 @@ void run_program(cmd_arguments const & args)
     std::atomic<size_t> hit_count{0};
 #endif
 
+    sync_out synced_out{args.out_file};
+
     // create a lambda function that iterates over the async buffer when called
     // (the buffer gets dynamically refilled as soon as possible)
     auto worker = [&] ()
@@ -72,11 +97,14 @@ void run_program(cmd_arguments const & args)
         decltype(ibf)::binning_bitvector result_buffer(ibf.bin_count());
         std::vector<size_t> result(ibf.bin_count(), 0);
 
-        for (auto & [seq] : sequence_input_buffer)
+        std::string result_string{};
+
+        for (auto && [id, seq] : sequence_input_buffer)
         {
 #if DEBUG
             ++seq_count;
 #endif
+            result_string.clear();
             std::fill(result.begin(), result.end(), 0);
             mini.compute(seq);
 
@@ -112,15 +140,24 @@ void run_program(cmd_arguments const & args)
             auto threshold = precomp_thresholds[index];
 
             size_t current_bin{0};
+            result_string += id;
+            result_string += '\t';
             for (auto & count : result)
             {
                 count = count >= threshold;
+                if (count)
+                {
+                    result_string += std::to_string(current_bin);
+                    result_string += ',';
+                }
 #if DEBUG
                     if (count && bin_no == current_bin)
                         ++hit_count;
 #endif
                 ++current_bin;
             }
+            result_string += '\n';
+            synced_out.write(result_string);
         }
     };
 
@@ -145,6 +182,8 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
     parser.info.version = "1.0.0";
     parser.add_positional_option(args.query_file, "Please provide a path the FASTQ file.");
     parser.add_positional_option(args.ibf_file, "Please provide a valid path to a minimizer IBF.");
+    parser.add_option(args.out_file, '\0', "output", "Please provide a valid path to the output.",
+                      seqan3::option_spec::DEFAULT);
     parser.add_option(args.window_size, '\0', "window", "Choose the window size.", seqan3::option_spec::DEFAULT,
                       seqan3::arithmetic_range_validator{1, 1000});
     parser.add_option(args.kmer_size, '\0', "kmer", "Choose the kmer size.", seqan3::option_spec::DEFAULT,
