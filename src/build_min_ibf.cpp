@@ -106,6 +106,9 @@ int main(int argc, char ** argv)
     if (args.gz && args.bz2)
         throw seqan3::argument_parser_error{"Files cannot be both gz and bz2 compressed."};
 
+    if (args.k > args.w)
+        throw seqan3::argument_parser_error{"The kmer size cannot be bigger than the window size."};
+
     run_program(args.bin_path, args.out_path, args.k, args.w, args.bins, args.bits, args.hash, args.gz, args.bz2);
     return 0;
 }

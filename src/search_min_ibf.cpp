@@ -213,6 +213,9 @@ int main(int argc, char ** argv)
         return -1;
     }
 
+    if (args.kmer_size > args.window_size)
+        throw seqan3::argument_parser_error{"The kmer size cannot be bigger than the window size."};
+
     if (!args.pattern_size)
     {
         std::vector<uint64_t> sequence_lengths{};
