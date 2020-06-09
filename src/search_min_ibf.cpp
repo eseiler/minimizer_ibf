@@ -75,7 +75,7 @@ void run_program(cmd_arguments const & args)
     size_t const kmers_per_window = args.window_size - args.kmer_size + 1;
     size_t const kmers_per_pattern = args.pattern_size - args.kmer_size + 1;
     size_t const minimal_number_of_minimizers = kmers_per_window == 1 ? kmers_per_pattern :
-                                                                        kmers_per_pattern / (kmers_per_window - 1);
+                                                std::ceil(kmers_per_pattern / static_cast<double>(kmers_per_window));
     size_t const maximal_number_of_minimizers = args.pattern_size - args.window_size + 1;
 
     std::vector<size_t> const precomp_thresholds = compute_simple_model(args);

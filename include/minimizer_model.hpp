@@ -332,12 +332,15 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
                                          size_t const errors,
                                          double const tau)
 {
-    std::vector<size_t> thresholds;
-    size_t kmers_per_window = window_size - kmer_size + 1;
-    size_t kmers_per_pattern = pattern_size - kmer_size + 1;
+    if (window_size == kmer_size)
+        return {pattern_size > errors * kmer_size ? pattern_size - errors * kmer_size : 1};
 
-    size_t minimal_number_of_minimizers = kmers_per_window == 1 ? kmers_per_pattern : kmers_per_pattern / (kmers_per_window - 1);
-    size_t maximal_number_of_minimizers = pattern_size - window_size + 1;
+    std::vector<size_t> thresholds;
+    size_t const kmers_per_window = window_size - kmer_size + 1;
+    size_t const kmers_per_pattern = pattern_size - kmer_size + 1;
+
+    size_t const minimal_number_of_minimizers = std::ceil(kmers_per_pattern / static_cast<double>(kmers_per_window));
+    size_t const maximal_number_of_minimizers = pattern_size - window_size + 1;
 
     std::vector<double> indirect_errors;
     indirect_errors = destroyed_indirectly_by_error<seqan3::dna4>(pattern_size, window_size, kmer_size);
@@ -357,8 +360,6 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
         for (auto & x : proba_error)
             x /= sum;
 
-        std::vector<double> proba_error_ex(number_of_minimizers, 0);
-
         double n =0;
         for (size_t i = 0; i < number_of_minimizers; ++i)
         {
@@ -371,7 +372,7 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
             }
         }
     }
-
+    assert(thresholds.size() != 0);
     return thresholds;
 }
 
