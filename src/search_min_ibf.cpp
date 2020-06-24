@@ -112,8 +112,7 @@ void run_program(cmd_arguments const & args)
             {
                 ibf.bulk_contains(hash, result_buffer);
 
-                size_t bin{0};
-                for (size_t batch = 0; batch < ((ibf.bin_count() + 63) >> 6); ++batch)
+                for (size_t batch = 0, bin = 0; batch < ((ibf.bin_count() + 63) >> 6); bin = 64 * ++batch)
                 {
                     size_t tmp = result_buffer.get_int(batch * 64);
                     if (tmp ^ (1ULL<<63))

@@ -333,7 +333,7 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
                                          double const tau)
 {
     if (window_size == kmer_size)
-        return {pattern_size > errors * kmer_size ? pattern_size - errors * kmer_size : 1};
+        return {pattern_size + 1 > (errors + 1) * kmer_size ? pattern_size + 1 - (errors + 1) * kmer_size : 1};
 
     std::vector<size_t> thresholds;
     size_t const kmers_per_window = window_size - kmer_size + 1;
@@ -351,6 +351,7 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
         std::vector<double> proba_x(kmers_per_pattern, number_of_minimizers / static_cast<double>(kmers_per_pattern));
 
         auto [p_mean, proba] = simple_model(kmer_size, proba_x, indirect_errors);
+        (void) p_mean;
 
         std::vector<double> proba_error(number_of_minimizers, 0);
         for (size_t i = 0; i < number_of_minimizers; ++i)
