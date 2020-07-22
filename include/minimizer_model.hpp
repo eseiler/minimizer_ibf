@@ -42,6 +42,7 @@ struct cmd_arguments
     uint8_t threads{1};
     uint64_t pattern_size{};
     double tau{0.99};
+    double threshold{0.0};
 };
 
 std::vector<size_t> pascal_row(size_t n)
