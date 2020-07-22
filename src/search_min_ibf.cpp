@@ -29,7 +29,7 @@ std::vector<size_t> compute_simple_model(cmd_arguments const & args)
 {
     std::vector<size_t> precomp_thresholds;
 
-    if (!do_cerealisation_in(precomp_thresholds, args))
+    if ((!do_cerealisation_in(precomp_thresholds, args)) & (args.threshold == 0.0))
     {
         precomp_thresholds = precompute_threshold(args.pattern_size,
                                                   args.window_size,
@@ -133,10 +133,20 @@ void run_program(cmd_arguments const & args)
             }
 
             size_t const minimizer_count = mini.minimizer_hash.size();
-            size_t index = std::min(minimizer_count < minimal_number_of_minimizers ? 0 :
-                                        minimizer_count - minimal_number_of_minimizers,
-                                    maximal_number_of_minimizers - minimal_number_of_minimizers);
-            auto threshold = precomp_thresholds[index];
+            //size_t index{};
+            size_t threshold{};
+            if (args.threshold == 0.0)
+            {
+                size_t index = std::min(minimizer_count < minimal_number_of_minimizers ? 0 :
+                                            minimizer_count - minimal_number_of_minimizers,
+                                        maximal_number_of_minimizers - minimal_number_of_minimizers);
+                threshold = precomp_thresholds[index];
+            }
+            else
+            {
+                threshold = static_cast<size_t>(minimizer_count * args.threshold);
+            }
+
 
             size_t current_bin{0};
             result_string += id;
@@ -195,6 +205,8 @@ void initialize_argument_parser(seqan3::argument_parser & parser, cmd_arguments 
                       seqan3::arithmetic_range_validator{0, 1});
     parser.add_option(args.pattern_size, '\0', "pattern",
                       "Choose the pattern size. Default: Use median of sequence lengths in query file.");
+    parser.add_option(args.threshold, '\0', "threshold", "If set this threshold is used instead of the probabilistic "
+                      "models.", seqan3::option_spec::DEFAULT, seqan3::arithmetic_range_validator{0, 1});
 }
 
 int main(int argc, char ** argv)
@@ -215,7 +227,7 @@ int main(int argc, char ** argv)
     if (args.kmer_size > args.window_size)
         throw seqan3::argument_parser_error{"The kmer size cannot be bigger than the window size."};
 
-    if (!args.pattern_size)
+    if ((!args.pattern_size) & (args.threshold == 0.0))
     {
         std::vector<uint64_t> sequence_lengths{};
         seqan3::sequence_file_input<my_traits, seqan3::fields<seqan3::field::seq>> query_in{args.query_file};
