@@ -36,14 +36,19 @@ struct cmd_arguments
     std::filesystem::path query_file{};
     std::filesystem::path ibf_file{};
     std::filesystem::path out_file{"search.out"};
-    uint64_t window_size{23};
-    uint8_t kmer_size{20};
-    uint8_t errors{0};
-    uint8_t threads{1};
-    uint64_t pattern_size{};
     double tau{0.99};
     double threshold{0.0};
+    uint64_t pattern_size{};
+    uint32_t window_size{23};
+    uint8_t errors{0};
+    uint8_t kmer_size{20};
+    uint8_t parts{1u};
+    uint8_t threads{1};
+    bool compressed{false};
+    bool write_time{false};
 };
+
+
 
 std::vector<size_t> pascal_row(size_t n)
 {
