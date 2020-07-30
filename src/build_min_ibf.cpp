@@ -216,17 +216,18 @@ inline void compute_minimisers(cmd_arguments const & arguments)
 }
 
 template <bool compressed>
-auto build_from_binary(cmd_arguments const & arguments)
+void build_from_binary(cmd_arguments const & arguments)
 {
     seqan3::ibf_config cfg{seqan3::bin_count{arguments.bins},
                            seqan3::bin_size{arguments.bits / arguments.parts},
                            seqan3::hash_function_count{arguments.hash},
                            arguments.threads};
 
-    seqan3::technical_binning_directory ibf{std::vector<std::vector<seqan3::dna4>>{},
+    seqan3::technical_binning_directory tbd{std::vector<std::vector<seqan3::dna4>>{},
                                             seqan3::views::minimiser_hash(seqan3::ungapped{arguments.k},
                                                                           seqan3::window_size{arguments.w}),
-                                            cfg};
+                                            cfg,
+                                            true};
 
     uint64_t num;
 
@@ -235,18 +236,24 @@ auto build_from_binary(cmd_arguments const & arguments)
         std::ifstream infile{arguments.bin_path[cur_bin], std::ios::binary};
 
         while(infile.read(reinterpret_cast<char*>(&num), sizeof(num)))
-            ibf.emplace(num, seqan3::bin_index{cur_bin});
+            tbd.emplace(num, seqan3::bin_index{cur_bin});
     }
 
     if constexpr (compressed)
     {
-        return seqan3::technical_binning_directory<seqan3::data_layout::compressed,
-                                                   typename decltype(ibf)::hash_adaptor_t,
-                                                   seqan3::dna4>{std::move(ibf)};
+        seqan3::technical_binning_directory<seqan3::data_layout::compressed,
+                                            typename decltype(tbd)::hash_adaptor_t,
+                                            seqan3::dna4> ctbd{std::move(tbd)};
+
+        std::ofstream os{arguments.out_path, std::ios::binary};
+        cereal::BinaryOutputArchive oarchive{os};
+        oarchive(ctbd);
     }
     else
     {
-        return ibf;
+        std::ofstream os{arguments.out_path, std::ios::binary};
+        cereal::BinaryOutputArchive oarchive{os};
+        oarchive(tbd);
     }
 }
 
