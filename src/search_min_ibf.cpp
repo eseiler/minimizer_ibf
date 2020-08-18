@@ -302,7 +302,7 @@ void run_program_single(cmd_arguments const & arguments)
 
             for (auto && count : result)
             {
-                if (count >= threshold)
+                if (count > threshold)
                 {
                     result_string += std::to_string(current_bin);
                     result_string += ',';

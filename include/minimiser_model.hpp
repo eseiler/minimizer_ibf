@@ -48,8 +48,6 @@ struct cmd_arguments
     bool write_time{false};
 };
 
-
-
 std::vector<size_t> pascal_row(size_t n)
 {
     std::vector<size_t> result(n + 1);
@@ -87,8 +85,10 @@ simple_model(size_t const kmer_size,
     for (size_t i = 0; i <= kmer_size; ++i)
     {
         double p_i_error = coefficients[i] * std::pow(p_mean, i) * std::pow(1 - p_mean, kmer_size - i);
+
         for (size_t j = 0; j < indirect_errors.size() && i + j <= kmer_size; ++j)
             probabilities[i + j] += p_i_error * indirect_errors[j];
+
         p_sum += probabilities[i];
     }
 
