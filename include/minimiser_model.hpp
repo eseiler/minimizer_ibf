@@ -197,6 +197,8 @@ public:
     {
         uint64_t text_length = std::ranges::size(text);
 
+        uint64_t const adjusted_seed = seed >> (64 - 2 * k);
+
         forward_hashes.clear();
         minimizer_hash.clear();
         minimizer_begin.clear();
@@ -211,9 +213,9 @@ public:
         uint64_t kmers_per_window = w - k + 1u;
 
         // Helper lambda for xor'ing values depending on `do_xor`.
-        auto apply_xor = [this] (uint64_t const val)
+        auto apply_xor = [adjusted_seed] (uint64_t const val)
         {
-            return val ^ seed;
+            return val ^ adjusted_seed;
         };
 
         // Compute all k-mer hashes for both forward and reverse strand.
