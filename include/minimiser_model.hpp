@@ -26,6 +26,11 @@
 
 #include <minimizer.hpp>
 
+inline constexpr static uint64_t adjust_seed(uint8_t const kmer_size, uint64_t const seed = 0x8F3F73B5CF1C9ADEULL) noexcept
+{
+    return seed >> (64u - 2u * kmer_size);
+}
+
 struct my_traits : seqan3::sequence_file_input_default_traits_dna
 {
     using sequence_alphabet = seqan3::dna4;
@@ -151,7 +156,7 @@ private:
     //!\brief The size of the k-mers.
     uint8_t k{20};
     //!\brief Random but fixed value to xor k-mers with. Counteracts consecutive minimizers.
-    uint64_t seed{0x8F3F73B5CF1C9ADE};
+    uint64_t seed{adjust_seed(k)};
 
     //!\brief Stores the k-mer hashes of the forward strand.
     std::vector<uint64_t> forward_hashes;
@@ -178,7 +183,7 @@ public:
      * \param[in] seed_ The seed to use. Default: 0x8F3F73B5CF1C9ADE.
      */
     boring_minimizer(window const w_, kmer const k_, uint64_t const seed_ = 0x8F3F73B5CF1C9ADE) :
-        w{w_.v}, k{k_.v}, seed{seed_}
+        w{w_.v}, k{k_.v}, seed{adjust_seed(k_.v, seed_)}
     {}
 
     /*!\brief Resize the minimizer.
@@ -190,14 +195,12 @@ public:
     {
         w = w_.v;
         k = k_.v;
-        seed = seed_;
+        seed = adjust_seed(k_.v, seed_);
     }
 
     void compute(text_t const & text)
     {
         uint64_t text_length = std::ranges::size(text);
-
-        uint64_t const adjusted_seed = seed >> (64 - 2 * k);
 
         forward_hashes.clear();
         minimizer_hash.clear();
@@ -213,9 +216,9 @@ public:
         uint64_t kmers_per_window = w - k + 1u;
 
         // Helper lambda for xor'ing values depending on `do_xor`.
-        auto apply_xor = [adjusted_seed] (uint64_t const val)
+        auto apply_xor = [this] (uint64_t const val)
         {
-            return val ^ adjusted_seed;
+            return val ^ seed;
         };
 
         // Compute all k-mer hashes for both forward and reverse strand.

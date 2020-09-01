@@ -5,6 +5,11 @@
 #include <seqan3/range/views/minimiser_hash.hpp>
 #include <seqan3/search/dream_index/technical_binning_directory.hpp>
 
+inline constexpr static uint64_t adjust_seed(uint8_t const kmer_size, uint64_t const seed = 0x8F3F73B5CF1C9ADEULL) noexcept
+{
+    return seed >> (64u - 2u * kmer_size);
+}
+
 struct my_traits : seqan3::sequence_file_input_default_traits_dna
 {
     using sequence_alphabet = seqan3::dna4;
@@ -60,14 +65,16 @@ struct ibf_builder
         {
             return seqan3::technical_binning_directory{std::move(technical_bins),
                                                        seqan3::views::minimiser_hash(seqan3::ungapped{arguments->k},
-                                                                                     seqan3::window_size{arguments->w}),
+                                                                                     seqan3::window_size{arguments->w},
+                                                                                     seqan3::seed{adjust_seed(arguments->k)}),
                                                        cfg};
         }
         else
         {
             return seqan3::technical_binning_directory{std::move(technical_bins),
                                                        seqan3::views::minimiser_hash(seqan3::ungapped{arguments->k},
-                                                                                     seqan3::window_size{arguments->w})
+                                                                                     seqan3::window_size{arguments->w},
+                                                                                     seqan3::seed{adjust_seed(arguments->k)})
                                                            | restrict_view,
                                                        cfg};
         }
@@ -153,7 +160,8 @@ void run_program(cmd_arguments const & arguments)
 inline void compute_minimisers(cmd_arguments const & arguments)
 {
     auto minimiser_view = seqan3::views::minimiser_hash(seqan3::ungapped{arguments.k},
-                                                        seqan3::window_size{arguments.w});
+                                                        seqan3::window_size{arguments.w},
+                                                        seqan3::seed{adjust_seed(arguments.k)});
     std::unordered_map<uint64_t, uint8_t> hash_table{}; // storage for minimisers
     uint64_t count{0};
     uint64_t filesize{0};
@@ -225,7 +233,8 @@ void build_from_binary(cmd_arguments const & arguments)
 
     seqan3::technical_binning_directory tbd{std::vector<std::vector<seqan3::dna4>>{},
                                             seqan3::views::minimiser_hash(seqan3::ungapped{arguments.k},
-                                                                          seqan3::window_size{arguments.w}),
+                                                                          seqan3::window_size{arguments.w},
+                                                                          seqan3::seed{adjust_seed(arguments.k)}),
                                             cfg,
                                             true};
 

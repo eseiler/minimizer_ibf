@@ -65,7 +65,8 @@ struct ibf_builder
                                seqan3::hash_function_count{2u},
                                1u};
         auto view = seqan3::views::minimiser_hash(seqan3::ungapped{arguments->kmer_size},
-                                                  seqan3::window_size{arguments->window_size});
+                                                  seqan3::window_size{arguments->window_size},
+                                                  seqan3::seed{adjust_seed(arguments->kmer_size)});
         return seqan3::technical_binning_directory{std::vector<std::vector<seqan3::dna4>>{},
                                                    std::move(view),
                                                    cfg,
