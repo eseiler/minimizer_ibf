@@ -86,3 +86,6 @@ target_link_libraries(build_min_ibf seqan3::seqan3)
 
 add_executable(search_min_ibf src/search_min_ibf.cpp)
 target_link_libraries(search_min_ibf seqan3::seqan3)
+
+add_executable(generate_reads src/generate_reads.cpp)
+target_link_libraries(generate_reads seqan3::seqan3)
