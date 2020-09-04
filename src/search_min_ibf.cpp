@@ -206,7 +206,7 @@ void run_program_multiple(cmd_arguments const & arguments)
                                                                             0 :
                                                                             minimiser_count - min_number_of_minimisers,
                                                                         max_number_of_minimisers -
-                                                                            min_number_of_minimisers)];
+                                                                            min_number_of_minimisers)] + 2;
 
                 result_string.clear();
                 result_string += id;
@@ -215,7 +215,7 @@ void run_program_multiple(cmd_arguments const & arguments)
                 size_t current_bin{0};
                 for (auto && count : counts[counter_id++])
                 {
-                    if (count >= threshold)
+                    if (count > threshold)
                     {
                         result_string += std::to_string(current_bin);
                         result_string += ',';
@@ -299,7 +299,7 @@ void run_program_single(cmd_arguments const & arguments)
                                                                          0 :
                                                                          minimiser_count - min_number_of_minimisers,
                                                                      max_number_of_minimisers -
-                                                                         min_number_of_minimisers)] + 1;
+                                                                         min_number_of_minimisers)] + 2;
 
             for (auto && count : result)
             {
