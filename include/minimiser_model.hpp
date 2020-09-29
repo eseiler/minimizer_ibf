@@ -344,7 +344,7 @@ std::vector<size_t> precompute_threshold(size_t const pattern_size,
                                          double const tau)
 {
     if (window_size == kmer_size)
-        return {pattern_size + 1 > (errors + 1) * kmer_size ? pattern_size + 1 - (errors + 1) * kmer_size : 1};
+        return {pattern_size + 1 > (errors + 1) * kmer_size ? pattern_size + 1 - (errors + 1) * kmer_size : 0};
 
     std::vector<size_t> thresholds;
     size_t const kmers_per_window = window_size - kmer_size + 1;

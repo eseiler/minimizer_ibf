@@ -144,6 +144,9 @@ void run_program_multiple(cmd_arguments const & arguments)
     size_t const kmers_per_pattern = arguments.pattern_size - arguments.kmer_size + 1;
     size_t const min_number_of_minimisers = kmers_per_window == 1 ? kmers_per_pattern :
                                                 std::ceil(kmers_per_pattern / static_cast<double>(kmers_per_window));
+    size_t const kmer_lemma = arguments.pattern_size + 1u > (arguments.errors + 1u) * arguments.kmer_size ?
+                                arguments.pattern_size + 1u - (arguments.errors + 1u) * arguments.kmer_size :
+                                0;
     size_t const max_number_of_minimisers = arguments.pattern_size - arguments.window_size + 1;
     std::vector<size_t> const precomp_thresholds = compute_simple_model(arguments);
 
@@ -202,6 +205,7 @@ void run_program_multiple(cmd_arguments const & arguments)
 
                 size_t const threshold = arguments.threshold != 0.0 ?
                                             static_cast<size_t>(minimiser_count * arguments.threshold) :
+                                            kmers_per_window == 1 ? kmer_lemma :
                                             precomp_thresholds[std::min(minimiser_count < min_number_of_minimisers ?
                                                                             0 :
                                                                             minimiser_count - min_number_of_minimisers,
@@ -215,7 +219,7 @@ void run_program_multiple(cmd_arguments const & arguments)
                 size_t current_bin{0};
                 for (auto && count : counts[counter_id++])
                 {
-                    if (count > threshold)
+                    if (count >= threshold)
                     {
                         result_string += std::to_string(current_bin);
                         result_string += ',';
@@ -277,6 +281,9 @@ void run_program_single(cmd_arguments const & arguments)
     size_t const min_number_of_minimisers = kmers_per_window == 1 ? kmers_per_pattern :
                                                 std::ceil(kmers_per_pattern / static_cast<double>(kmers_per_window));
     size_t const max_number_of_minimisers = arguments.pattern_size - arguments.window_size + 1;
+    size_t const kmer_lemma = arguments.pattern_size + 1u > (arguments.errors + 1u) * arguments.kmer_size ?
+                            arguments.pattern_size + 1u - (arguments.errors + 1u) * arguments.kmer_size :
+                            0;
     std::vector<size_t> const precomp_thresholds = compute_simple_model(arguments);
 
     auto worker = [&] (size_t const start, size_t const end)
@@ -295,6 +302,7 @@ void run_program_single(cmd_arguments const & arguments)
 
             size_t const threshold = arguments.threshold != 0.0 ?
                                          static_cast<size_t>(minimiser_count * arguments.threshold) :
+                                         kmers_per_window == 1 ? kmer_lemma :
                                          precomp_thresholds[std::min(minimiser_count < min_number_of_minimisers ?
                                                                          0 :
                                                                          minimiser_count - min_number_of_minimisers,
@@ -303,7 +311,7 @@ void run_program_single(cmd_arguments const & arguments)
 
             for (auto && count : result)
             {
-                if (count > threshold)
+                if (count >= threshold)
                 {
                     result_string += std::to_string(current_bin);
                     result_string += ',';
